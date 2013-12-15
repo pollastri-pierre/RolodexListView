@@ -11,10 +11,12 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.os.Build;
+import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.ListAdapter;
+import android.widget.Toast;
 
 import java.util.Random;
 
@@ -25,8 +27,15 @@ public class MainActivity extends ActionBarActivity {
         super.onCreate(savedInstanceState);
 
         RolodexListView listView = new RolodexListView(this, null);
+        listView.setPadding(20, 20, 20, 20);
         setContentView(listView);
         listView.setAdapter(new SampleAdapter());
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+                Toast.makeText(MainActivity.this, "Click on " + i, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private class SampleAdapter extends BaseAdapter {

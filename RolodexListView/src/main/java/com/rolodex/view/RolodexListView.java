@@ -162,7 +162,7 @@ public class RolodexListView extends AdapterView<ListAdapter> {
 
         for (int childIndex = 0; childIndex < childCount; childIndex++) {
             final View child = getChildAt(childIndex);
-            child.layout(0, -mTopOffset + childIndex * mDistanceBetweenPage, getWidth(), -mTopOffset + getHeight() + childIndex * mDistanceBetweenPage);
+            child.layout(getPaddingLeft(), -mTopOffset + childIndex * mDistanceBetweenPage, getWidth() - getPaddingRight(), -mTopOffset + getHeight() + childIndex * mDistanceBetweenPage);
         }
     }
 
@@ -188,9 +188,11 @@ public class RolodexListView extends AdapterView<ListAdapter> {
         LayoutParams params = (LayoutParams) (child.getLayoutParams() instanceof LayoutParams ? child
                 .getLayoutParams() : null);
         addViewInLayout(child, index, params, true);
+        final int width = getWidth() - getPaddingLeft() - getPaddingRight();
+        final int height = getHeight() - getPaddingTop() - getPaddingBottom();
         child.forceLayout();
         child.destroyDrawingCache();
-        child.measure(MeasureSpec.AT_MOST | getWidth(), MeasureSpec.AT_MOST | getHeight());
+        child.measure(MeasureSpec.AT_MOST | width, MeasureSpec.AT_MOST | height);
         child.invalidate();
     }
 
@@ -250,7 +252,9 @@ public class RolodexListView extends AdapterView<ListAdapter> {
 
     protected void performOnClickItem(float x, float y) {
         if (getOnItemClickListener() != null) {
-            int position = 0;
+            int position = (int) ((mTopOffset + y) / (mDistanceBetweenPage));
+            position = Math.min(position, getAdapter().getCount() - 1);
+
             getOnItemClickListener().onItemClick(this, getView(position), position, getAdapter().getItemId(position));
         }
     }
