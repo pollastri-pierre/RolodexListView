@@ -190,7 +190,7 @@ public class RolodexListView extends AdapterView<ListAdapter> {
         addViewInLayout(child, index, params, true);
         child.forceLayout();
         child.destroyDrawingCache();
-        child.measure(MeasureSpec.EXACTLY | getWidth(), MeasureSpec.EXACTLY | getHeight());
+        child.measure(MeasureSpec.AT_MOST | getWidth(), MeasureSpec.AT_MOST | getHeight());
         child.invalidate();
     }
 
@@ -245,6 +245,13 @@ public class RolodexListView extends AdapterView<ListAdapter> {
         }
         if (needInvalidate) {
             ViewCompat.postInvalidateOnAnimation(this);
+        }
+    }
+
+    protected void performOnClickItem(float x, float y) {
+        if (getOnItemClickListener() != null) {
+            int position = 0;
+            getOnItemClickListener().onItemClick(this, getView(position), position, getAdapter().getItemId(position));
         }
     }
 
@@ -377,7 +384,7 @@ public class RolodexListView extends AdapterView<ListAdapter> {
                     if (mTouchMode == TOUCH_MODE_DOWN
                             || mTouchMode == TOUCH_MODE_TAP) {
                         // Perform Click
-                        Toast.makeText(getContext(), "Click", Toast.LENGTH_SHORT).show();
+                        performOnClickItem(ev.getX(), ev.getY());
                     }
                     mTouchMode = TOUCH_MODE_IDLE;
                 }
