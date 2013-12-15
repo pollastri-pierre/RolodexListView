@@ -19,6 +19,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.widget.AdapterView;
 import android.widget.ListAdapter;
+import android.widget.Toast;
 
 /**
  * Created by Pollastri Pierre on 08/12/2013.
@@ -49,6 +50,9 @@ public class RolodexListView extends AdapterView<ListAdapter> {
     private int mFirstPosition;
     private int mLastPosition;
     private int mTopOffset;
+    private int mMaxTopOffset;
+
+    private int mDistanceBetweenPage = 300;
 
     // Computation Caches
     private int mItemHeight;
@@ -85,6 +89,7 @@ public class RolodexListView extends AdapterView<ListAdapter> {
         mTouchSlop = configuration.getScaledTouchSlop();
         mMaximumFlingVelocity = configuration.getScaledMaximumFlingVelocity();
         mMinimumFlingVelocity = configuration.getScaledMinimumFlingVelocity();
+        mTopOffset = getTopPaddingOffset();
     }
 
     @Override
@@ -100,6 +105,7 @@ public class RolodexListView extends AdapterView<ListAdapter> {
         mAdapter = listAdapter;
 
         mAdapter.registerDataSetObserver(mAdapterDataSetObserver);
+        reloadData();
     }
 
     @Override
@@ -156,7 +162,7 @@ public class RolodexListView extends AdapterView<ListAdapter> {
 
         for (int childIndex = 0; childIndex < childCount; childIndex++) {
             final View child = getChildAt(childIndex);
-            child.layout(0, mTopOffset + childIndex * 300, getWidth(), mTopOffset + getHeight() + childIndex * 300);
+            child.layout(0, -mTopOffset + childIndex * mDistanceBetweenPage, getWidth(), -mTopOffset + getHeight() + childIndex * mDistanceBetweenPage);
         }
     }
 
@@ -196,26 +202,27 @@ public class RolodexListView extends AdapterView<ListAdapter> {
 
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
-        final int top = child.getTop() - mTopOffset;
+        final int top = child.getTop();
         final int left = child.getLeft();
 
         final int centerY = child.getHeight() / 2;
         final int centerX = child.getWidth() / 2;
 
+
         mCamera.save();
-        mCamera.translate(0, 0, 220);
+        //mCamera.translate(0, 0, 1020);
         mCamera.rotateX((float) -20); // remove this line..
         mCamera.getMatrix(mMatrix);
         mCamera.restore();
 
-        mMatrix.preTranslate(-centerX, -centerY);
-        mMatrix.postTranslate(centerX, centerY);
+        mMatrix.preTranslate(-centerX, 0);
+        mMatrix.postTranslate(centerX, 0);
         mMatrix.postTranslate(left, top);
         canvas.save();
-        canvas.setMatrix(mMatrix);
-        //canvas.translate(left, top);
+        canvas.concat(mMatrix);
         child.draw(canvas);
         canvas.restore();
+
         return false;
     }
 
@@ -283,7 +290,7 @@ public class RolodexListView extends AdapterView<ListAdapter> {
             }
         }
 
-        return false;
+        return true;
     }
 
     @Override
@@ -370,6 +377,7 @@ public class RolodexListView extends AdapterView<ListAdapter> {
                     if (mTouchMode == TOUCH_MODE_DOWN
                             || mTouchMode == TOUCH_MODE_TAP) {
                         // Perform Click
+                        Toast.makeText(getContext(), "Click", Toast.LENGTH_SHORT).show();
                     }
                     mTouchMode = TOUCH_MODE_IDLE;
                 }
@@ -385,8 +393,19 @@ public class RolodexListView extends AdapterView<ListAdapter> {
 
     protected int computeOffset(ScrollerCompat scroller, int newOffset) {
         final int maxBottom = 300000; // For tests
-        moveTopOffset(newOffset);
-        return OFFSET_SCROLLING;
+        int result = OFFSET_SCROLLING;
+
+        if (newOffset <= getPaddingTop()) {
+            moveTopOffset(getPaddingTop());
+            result = OFFSET_HIT_TOP;
+        } else if (newOffset >= mMaxTopOffset) {
+            moveTopOffset(mMaxTopOffset);
+            result = OFFSET_HIT_BOTTOM;
+        } else {
+            moveTopOffset(newOffset);
+        }
+        requestLayout();
+        return result;
     }
 
     protected void moveTopOffset(int newOffset) {
@@ -394,10 +413,16 @@ public class RolodexListView extends AdapterView<ListAdapter> {
         postInvalidate();
     }
 
+    private void reloadData() {
+        mMaxTopOffset = 600;
+        mMaxTopOffset = (getAdapter().getCount() - 1) * (mDistanceBetweenPage);
+    }
+
     private DataSetObserver mAdapterDataSetObserver = new DataSetObserver() {
         @Override
         public void onChanged() {
             super.onChanged();
+            reloadData();
         }
 
         @Override

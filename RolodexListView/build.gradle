@@ -1,4 +1,4 @@
-rm buildscript {
+buildscript {
     repositories {
         mavenCentral()
     }
@@ -6,6 +6,7 @@ rm buildscript {
         classpath 'com.android.tools.build:gradle:0.6.+'
     }
 }
+
 apply plugin: 'android'
 
 repositories {
