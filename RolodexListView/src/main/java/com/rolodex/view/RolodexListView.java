@@ -17,6 +17,10 @@ import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.Interpolator;
 import android.widget.AdapterView;
 import android.widget.ListAdapter;
 import android.widget.Toast;
@@ -39,12 +43,23 @@ public class RolodexListView extends AdapterView<ListAdapter> {
     private static final int OFFSET_HIT_BOTTOM = 1;
     private static final int OFFSET_HIT_TOP = 2;
 
+    private static final int MODE_ROLODEX = 1 << 0;
+    private static final int MODE_SHOW_ITEM = 1 << 1;
+    private static final int MODE_ANIMATION = 1 << 2;
+
+    private static final long ANIMATION_FRAMERATE = 1000 / 60; // 60 FPS
+    private static final long ANIMATION_DONE = -1;
+
+    public static final int NO_SELECTION = -1;
+
     // Drawing object
     private final Camera mCamera = new Camera();
     private final Matrix mMatrix = new Matrix();
 
     // Properties
-    private int mItemPerPage = 4;
+    private boolean mAutoSelectMode = true;
+    private Interpolator mItemShowAnimationInterpolator = new AccelerateDecelerateInterpolator();
+    private long mAnimationDuration = 600;
 
     // View position and offsets
     private int mFirstPosition;
@@ -71,6 +86,13 @@ public class RolodexListView extends AdapterView<ListAdapter> {
     private ScrollerCompat mScroller;
     private VelocityTracker mVelocityTracker;
 
+    // Internal State
+    private int mViewMode = MODE_ROLODEX;
+    private long mAnimationStartTime = ANIMATION_DONE;
+    private float mAnimationInterpolation = 0.f;
+
+    private int mSelectedItem = NO_SELECTION;
+    private int mPendingSelectedItem = NO_SELECTION;
 
     public RolodexListView(Context context) {
         this(context, null);
@@ -89,7 +111,8 @@ public class RolodexListView extends AdapterView<ListAdapter> {
         mTouchSlop = configuration.getScaledTouchSlop();
         mMaximumFlingVelocity = configuration.getScaledMaximumFlingVelocity();
         mMinimumFlingVelocity = configuration.getScaledMinimumFlingVelocity();
-        mTopOffset = getTopPaddingOffset();
+        mTopOffset = 0;
+        setClipToPadding(false);
     }
 
     @Override
@@ -110,12 +133,24 @@ public class RolodexListView extends AdapterView<ListAdapter> {
 
     @Override
     public View getSelectedView() {
-        return null;
+        return getChildAt(mSelectedItem);
     }
 
     @Override
     public void setSelection(int i) {
-
+        if (mAutoSelectMode && i != NO_SELECTION) {
+            mSelectedItem = i;
+            mViewMode = MODE_SHOW_ITEM | MODE_ANIMATION;
+            mAnimationStartTime = System.currentTimeMillis();
+            postDelayed(mAnimationRunnable, ANIMATION_FRAMERATE);
+        } else if (mAutoSelectMode && i == NO_SELECTION) {
+            mPendingSelectedItem = NO_SELECTION;
+            mViewMode = MODE_ROLODEX | MODE_ANIMATION;
+            mAnimationStartTime = System.currentTimeMillis();
+            postDelayed(mAnimationRunnable, ANIMATION_FRAMERATE);
+        } else {
+            mSelectedItem = i;
+        }
     }
 
     // Layouting
@@ -128,7 +163,7 @@ public class RolodexListView extends AdapterView<ListAdapter> {
             return ;
         }
 
-        mItemHeight = (bottom - top) / mItemPerPage;
+        //mItemHeight = (bottom - top) / mItemPerPage;
 
         layout();
     }
@@ -155,6 +190,9 @@ public class RolodexListView extends AdapterView<ListAdapter> {
                 addAndMeasureChild(obtainView(index));
             }
         }
+
+        mFirstPosition = offsetToPosition(mTopOffset);
+        mLastPosition = offsetToPosition(mTopOffset + getHeight());
     }
 
     protected void layoutChildren() {
@@ -162,7 +200,28 @@ public class RolodexListView extends AdapterView<ListAdapter> {
 
         for (int childIndex = 0; childIndex < childCount; childIndex++) {
             final View child = getChildAt(childIndex);
-            child.layout(getPaddingLeft(), -mTopOffset + childIndex * mDistanceBetweenPage, getWidth() - getPaddingRight(), -mTopOffset + getHeight() + childIndex * mDistanceBetweenPage);
+            final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+            lp.index = childIndex;
+
+            int left = getPaddingLeft();
+            int right = getWidth() - getPaddingRight();
+            int top = -mTopOffset + childIndex * mDistanceBetweenPage + getPaddingTop();
+            int bottom = top + child.getMeasuredHeight();
+
+            // Animation Layouting
+
+            if (mAnimationStartTime != ANIMATION_DONE) {
+                if (lp.index != mSelectedItem) {
+                    top += getHeight() * (lp.index > mSelectedItem ? 1 : -1) * mAnimationInterpolation;
+                    bottom += getHeight() * (lp.index > mSelectedItem ? 1 : -1) * mAnimationInterpolation;
+                } else if (lp.index == mSelectedItem) {
+                    int oldTop = top;
+                    top = (int) (top - (top * mAnimationInterpolation));
+                    bottom -= oldTop - top;
+                }
+
+            }
+            child.layout(left, top + getPaddingTop(), right, bottom + getPaddingTop());
         }
     }
 
@@ -185,14 +244,14 @@ public class RolodexListView extends AdapterView<ListAdapter> {
     }
 
     private void addAndMeasureChild(View child, int index) {
-        LayoutParams params = (LayoutParams) (child.getLayoutParams() instanceof LayoutParams ? child
-                .getLayoutParams() : null);
+        LayoutParams params = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, index);
         addViewInLayout(child, index, params, true);
-        final int width = getWidth() - getPaddingLeft() - getPaddingRight();
-        final int height = getHeight() - getPaddingTop() - getPaddingBottom();
+        int width = getWidth() - getPaddingLeft() - getPaddingRight();
+        int height = getHeight() - getPaddingTop() - getPaddingBottom();
+
         child.forceLayout();
         child.destroyDrawingCache();
-        child.measure(MeasureSpec.AT_MOST | width, MeasureSpec.AT_MOST | height);
+        child.measure(MeasureSpec.EXACTLY | width, MeasureSpec.EXACTLY | height);
         child.invalidate();
     }
 
@@ -210,10 +269,15 @@ public class RolodexListView extends AdapterView<ListAdapter> {
         final int centerY = child.getHeight() / 2;
         final int centerX = child.getWidth() / 2;
 
+        final LayoutParams lp = (LayoutParams) child.getLayoutParams();
 
         mCamera.save();
         //mCamera.translate(0, 0, 1020);
-        mCamera.rotateX((float) -20); // remove this line..
+        if (mAnimationStartTime != ANIMATION_DONE && lp.index == mSelectedItem) {
+            mCamera.rotateX(-20 + 20 * mAnimationInterpolation);
+        } else {
+            mCamera.rotateX((float) -20);
+        }
         mCamera.getMatrix(mMatrix);
         mCamera.restore();
 
@@ -250,17 +314,30 @@ public class RolodexListView extends AdapterView<ListAdapter> {
         }
     }
 
-    protected void performOnClickItem(float x, float y) {
-        if (getOnItemClickListener() != null) {
-            int position = (int) ((mTopOffset + y) / (mDistanceBetweenPage));
-            position = Math.min(position, getAdapter().getCount() - 1);
+    protected int offsetToPosition(int offset) {
+        int position = (int) ((offset) / (mDistanceBetweenPage));
+        position = Math.min(position, getAdapter().getCount() - 1);
+        return position;
+    }
 
+    protected void performOnClickItem(float x, float y) {
+
+        int position = offsetToPosition((int) (mTopOffset + y));
+
+        setSelection(position);
+
+        if (getOnItemClickListener() != null) {
             getOnItemClickListener().onItemClick(this, getView(position), position, getAdapter().getItemId(position));
         }
     }
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
+
+        if ((mViewMode & MODE_ROLODEX) == 0) {
+            return super.onInterceptTouchEvent(ev);
+        }
+
         if (mVelocityTracker == null) {
             mVelocityTracker = VelocityTracker.obtain();
         }
@@ -306,9 +383,18 @@ public class RolodexListView extends AdapterView<ListAdapter> {
 
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
+        if ((mViewMode & MODE_ROLODEX) == 0) {
+            return super.onTouchEvent(ev);
+        }
+
         if (getChildCount() == 0) {
             return false;
         }
+
+        if (mVelocityTracker == null) {
+            mVelocityTracker = VelocityTracker.obtain();
+        }
+
         mVelocityTracker.addMovement(ev);
         final int action = ev.getAction() & MotionEventCompat.ACTION_MASK;
         mLastTouchX = ev.getX();
@@ -403,11 +489,10 @@ public class RolodexListView extends AdapterView<ListAdapter> {
     }
 
     protected int computeOffset(ScrollerCompat scroller, int newOffset) {
-        final int maxBottom = 300000; // For tests
         int result = OFFSET_SCROLLING;
 
-        if (newOffset <= getPaddingTop()) {
-            moveTopOffset(getPaddingTop());
+        if (newOffset <= 0) {
+            moveTopOffset(0);
             result = OFFSET_HIT_TOP;
         } else if (newOffset >= mMaxTopOffset) {
             moveTopOffset(mMaxTopOffset);
@@ -425,8 +510,18 @@ public class RolodexListView extends AdapterView<ListAdapter> {
     }
 
     private void reloadData() {
-        mMaxTopOffset = 600;
-        mMaxTopOffset = (getAdapter().getCount() - 1) * (mDistanceBetweenPage);
+        if (getHeight() == 0) {
+            getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+                @Override
+                public boolean onPreDraw() {
+                    getViewTreeObserver().removeOnPreDrawListener(this);
+                    reloadData();
+                    return false;
+                }
+            });
+            return;
+        }
+        mMaxTopOffset = (getAdapter().getCount() - 1) * (mDistanceBetweenPage) - getHeight() / 2 + getPaddingBottom();
     }
 
     private DataSetObserver mAdapterDataSetObserver = new DataSetObserver() {
@@ -441,5 +536,44 @@ public class RolodexListView extends AdapterView<ListAdapter> {
             super.onInvalidated();
         }
     };
+
+    private Runnable mAnimationRunnable = new Runnable() {
+        @Override
+        public void run() {
+
+            if ((mViewMode & MODE_ANIMATION) == 0) {
+                if (mViewMode == MODE_ROLODEX) {
+                    mSelectedItem = mPendingSelectedItem;
+                }
+                return ;
+            }
+
+            long now = System.currentTimeMillis();
+
+            mAnimationInterpolation = mItemShowAnimationInterpolator.getInterpolation((System.currentTimeMillis() - mAnimationStartTime) / (float) mAnimationDuration);
+            if (now >= mAnimationStartTime + mAnimationDuration) {
+                mAnimationInterpolation = 1.f;
+                mViewMode &= ~MODE_ANIMATION;
+            }
+
+            if ((mViewMode & MODE_ROLODEX) == MODE_ROLODEX) {
+               mAnimationInterpolation = 1.f - mAnimationInterpolation;
+            }
+
+            requestLayout();
+            invalidate();
+            postDelayed(this, ANIMATION_FRAMERATE);
+        }
+    };
+
+    private class LayoutParams extends ViewGroup.LayoutParams {
+        public int index;
+
+
+        private LayoutParams(int width, int height, int index) {
+            super(width, height);
+            this.index = index;
+        }
+    }
 
 }

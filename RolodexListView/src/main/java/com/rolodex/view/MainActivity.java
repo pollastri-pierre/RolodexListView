@@ -26,14 +26,24 @@ public class MainActivity extends ActionBarActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        RolodexListView listView = new RolodexListView(this, null);
-        listView.setPadding(20, 20, 20, 20);
+        final RolodexListView listView = new RolodexListView(this, null);
+        listView.setPadding(20, 50, 20, 50);
         setContentView(listView);
         listView.setAdapter(new SampleAdapter());
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
-            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                Toast.makeText(MainActivity.this, "Click on " + i, Toast.LENGTH_SHORT).show();
+            public void onItemClick(AdapterView<?> adapterView, View view, final int i, long l) {
+
+                // When we an Item is click listen for the child click for dismissing the selection
+
+                listView.getSelectedView().setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        // Remove any selection of the Rolodex
+                        listView.setSelection(RolodexListView.NO_SELECTION);
+                    }
+                });
+
             }
         });
     }
@@ -64,6 +74,7 @@ public class MainActivity extends ActionBarActivity {
             v.setImageDrawable(getResources().getDrawable(getResources()
                     .getIdentifier("test_" + (r.nextInt(7) + 1), "drawable", getPackageName())));
             v.setScaleType(ImageView.ScaleType.FIT_XY);
+            v.setLayoutParams(new ViewGroup.LayoutParams(100, 100));
             //View v = new View(MainActivity.this);
             //v.setBackgroundColor(Color.argb(250, r.nextInt(255), r.nextInt(255), r.nextInt(255)));
             //Button v = new Button(MainActivity.this);
